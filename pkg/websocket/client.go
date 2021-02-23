@@ -18,7 +18,7 @@ type Message struct {
 	Body string `json:"body"`
 }
 
-func (c *Client) Read() {
+func (c *Client) Read(eventChannel chan string) {
 	defer func() {
 		c.Pool.Unregister <- c
 		c.Conn.Close()
@@ -30,6 +30,11 @@ func (c *Client) Read() {
 			log.Println(err)
 			return
 		}
+
+		fmt.Println("AWASO")
+
+		eventChannel <- string(p)
+
 		message := Message{Type: messageType, Body: string(p)}
 		c.Pool.Broadcast <- message
 		fmt.Printf("Message Received: %+v\n", message)

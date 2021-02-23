@@ -5,10 +5,11 @@ import (
 	"log"
 	"net/http"
 
+	state "b2b-prototype-backend/pkg/state"
 	websocket "b2b-prototype-backend/pkg/websocket"
 )
 
-func connectWebsocket(pool *websocket.Pool, w http.ResponseWriter, r *http.Request) {
+func serveWebsocket(pool *websocket.Pool, w http.ResponseWriter, r *http.Request, eventChannel chan string) {
 	conn, err := websocket.Upgrade(w, r)
 	if err != nil {
 		fmt.Fprintf(w, "%+V\n", err)
@@ -20,15 +21,18 @@ func connectWebsocket(pool *websocket.Pool, w http.ResponseWriter, r *http.Reque
 	}
 
 	pool.Register <- client
-	client.Read()
+	client.Read(eventChannel)
 }
 
 func setupRoutes() {
+	stateManager := state.NewStateManager()
+	go stateManager.Start()
+
 	pool := websocket.NewPool()
 	go pool.Start()
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		connectWebsocket(pool, w, r)
+		serveWebsocket(pool, w, r, stateManager.Event)
 	})
 }
 
