@@ -1,6 +1,10 @@
 package state
 
-import "fmt"
+import (
+	"fmt"
+
+	websocket "b2b-prototype-backend/pkg/websocket"
+)
 
 type StateManager struct {
 	State State
@@ -16,13 +20,12 @@ func NewStateManager() *StateManager {
 	}
 }
 
-func (stateManager *StateManager) Start() {
-	fmt.Println("starting channel")
+func (stateManager *StateManager) Start(broadcast chan websocket.Message) {
 	for {
-		fmt.Println("loop")
 		select {
 		case event := <-stateManager.Event:
 			fmt.Println("PROCESSING COMMAND ", event)
+			broadcast <- websocket.Message{Type: 1, Body: "JUHUUUU"}
 		}
 	}
 }

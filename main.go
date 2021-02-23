@@ -25,11 +25,11 @@ func serveWebsocket(pool *websocket.Pool, w http.ResponseWriter, r *http.Request
 }
 
 func setupRoutes() {
-	stateManager := state.NewStateManager()
-	go stateManager.Start()
-
 	pool := websocket.NewPool()
 	go pool.Start()
+
+	stateManager := state.NewStateManager()
+	go stateManager.Start(pool.Broadcast)
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		serveWebsocket(pool, w, r, stateManager.Event)
