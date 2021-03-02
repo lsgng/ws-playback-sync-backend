@@ -6,11 +6,24 @@ use std::error::Error;
 use uuid::Uuid;
 use warp::ws::{Message, WebSocket};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload", rename_all = "camelCase")]
 pub enum Input {
     #[serde(rename = "register")]
     Register,
+}
+
+impl Input {
+    pub fn from_message(message: Message) -> Result<Self, ()> {
+        let message_string = message.to_str()?;
+        match serde_json::from_str::<Input>(&message_string) {
+            Ok(input) => Ok(input),
+            Err(err) => {
+                eprintln!("{}", err);
+                return Err(());
+            }
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

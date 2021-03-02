@@ -1,30 +1,21 @@
 use chrono::{DateTime, Utc};
 use futures::stream::SplitStream;
 use futures::{future, FutureExt, SinkExt, Stream, StreamExt, TryStream, TryStreamExt};
-use log::{debug, error, info, log_enabled, Level};
-use serde::{Deserialize, Serialize};
+use log::{error, info};
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::sync::Arc;
-use std::time::Duration;
-use std::{error, result};
 use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
 use warp::ws::{Message, WebSocket};
-use warp::{http::StatusCode, reply::json, Reply};
-use warp::{Filter, Rejection};
+use warp::Filter;
 
 mod client;
 use client::Client;
 mod protocol;
-use protocol::{Output, RegisteredPayload};
+use protocol::{Input, Output, RegisteredPayload};
 
 type Clients = Arc<RwLock<HashMap<Uuid, Client>>>;
-
-#[derive(Serialize, Debug)]
-pub struct RegisterResponse {
-    url: String,
-}
 
 #[tokio::main]
 async fn main() {
@@ -37,7 +28,6 @@ async fn main() {
         .and(with_clients(clients.clone()))
         .map(|ws: warp::ws::Ws, clients: Clients| {
             ws.on_upgrade(|websocket| async {
-                info!("Websocket upgrade successful");
                 tokio::spawn(websocket_handler(websocket, clients));
             })
         });
@@ -53,7 +43,7 @@ fn with_clients(clients: Clients) -> impl Filter<Extract = (Clients,), Error = I
 
 async fn register_client(id: Uuid, clients: Clients) {
     clients.write().await.insert(id, Client { id });
-    info!("New client regeistered: {}", id.to_simple().to_string());
+    info!("New client registered: {}", id.to_simple().to_string());
 }
 
 async fn websocket_handler(websocket: WebSocket, clients: Clients) {
@@ -63,32 +53,28 @@ async fn websocket_handler(websocket: WebSocket, clients: Clients) {
         let message = match input {
             Ok(message) => message,
             Err(error) => {
-                error!("Failed to receive message: {}", error);
+                error!("Failed to read input message: {}", error);
                 break;
             }
         };
 
-        match message.to_str() {
-            Ok("register") => {
+        let input = match Input::from_message(message) {
+            Ok(input) => input,
+            Err(_) => {
+                error!("Failed to parse input message");
+                break;
+            }
+        };
+
+        match input {
+            Input::Register => {
                 let uuid = Uuid::new_v4();
-
                 register_client(uuid.clone(), clients.clone()).await;
-
                 let output = Output::Registered(RegisteredPayload::new(uuid));
                 if let Err(error) = output.send(&mut sink).await {
-                    error!("Failed to send message: {}", error);
+                    error!("Failed to send output message: {}", error);
                     break;
                 }
-            }
-
-            Ok(message) => {
-                error!("Unsupported message: {:?}", message);
-                break;
-            }
-
-            Err(()) => {
-                error!("Failed to parse message");
-                break;
             }
         }
     }
