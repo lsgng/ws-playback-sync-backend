@@ -16,12 +16,15 @@ use warp::{Filter, Rejection};
 
 mod client;
 use client::Client;
+mod protocol;
+use protocol::{Output, RegisteredPayload};
+
+type Clients = Arc<RwLock<HashMap<Uuid, Client>>>;
 
 #[derive(Serialize, Debug)]
 pub struct RegisterResponse {
     url: String,
 }
-type Clients = Arc<RwLock<HashMap<Uuid, Client>>>;
 
 #[tokio::main]
 async fn main() {
@@ -56,8 +59,8 @@ async fn register_client(id: Uuid, clients: Clients) {
 async fn websocket_handler(websocket: WebSocket, clients: Clients) {
     let (mut sink, mut stream) = websocket.split();
 
-    while let Some(result) = stream.next().await {
-        let message = match result {
+    while let Some(input) = stream.next().await {
+        let message = match input {
             Ok(message) => message,
             Err(error) => {
                 error!("Failed to receive message: {}", error);
@@ -71,17 +74,18 @@ async fn websocket_handler(websocket: WebSocket, clients: Clients) {
 
                 register_client(uuid.clone(), clients.clone()).await;
 
-                let response = Message::text(uuid.to_simple().to_string());
-
-                if let Err(error) = sink.send(response).await {
+                let output = Output::Registered(RegisteredPayload::new(uuid));
+                if let Err(error) = output.send(&mut sink).await {
                     error!("Failed to send message: {}", error);
                     break;
                 }
             }
+
             Ok(message) => {
                 error!("Unsupported message: {:?}", message);
                 break;
             }
+
             Err(()) => {
                 error!("Failed to parse message");
                 break;
