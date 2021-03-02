@@ -11,6 +11,8 @@ use warp::ws::{Message, WebSocket};
 pub enum Input {
     #[serde(rename = "register")]
     Register,
+    Play(PlayPayload),
+    Stop(StopPayload),
 }
 
 impl Input {
@@ -31,6 +33,8 @@ impl Input {
 pub enum Output {
     #[serde(rename = "registered")]
     Registered(RegisteredPayload),
+    Play(PlayPayload),
+    Stop(StopPayload),
 }
 
 impl Output {
@@ -58,5 +62,29 @@ pub struct RegisteredPayload {
 impl RegisteredPayload {
     pub fn new(user_id: Uuid) -> Self {
         RegisteredPayload { user_id }
+    }
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayPayload {
+    pub deck: u32,
+}
+
+impl PlayPayload {
+    pub fn new(deck: u32) -> Self {
+        PlayPayload { deck }
+    }
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StopPayload {
+    pub deck: u32,
+}
+
+impl StopPayload {
+    pub fn new(deck: u32) -> Self {
+        StopPayload { deck }
     }
 }

@@ -13,7 +13,7 @@ use warp::Filter;
 mod client;
 use client::Client;
 mod protocol;
-use protocol::{Input, Output, RegisteredPayload};
+use protocol::{Input, Output, PlayPayload, RegisteredPayload, StopPayload};
 
 type Clients = Arc<RwLock<HashMap<Uuid, Client>>>;
 
@@ -71,6 +71,22 @@ async fn websocket_handler(websocket: WebSocket, clients: Clients) {
                 let uuid = Uuid::new_v4();
                 register_client(uuid.clone(), clients.clone()).await;
                 let output = Output::Registered(RegisteredPayload::new(uuid));
+                if let Err(error) = output.send(&mut sink).await {
+                    error!("Failed to send output message: {}", error);
+                    break;
+                }
+            }
+
+            Input::Play(payload) => {
+                let output = Output::Play(PlayPayload::new(payload.deck));
+                if let Err(error) = output.send(&mut sink).await {
+                    error!("Failed to send output message: {}", error);
+                    break;
+                }
+            }
+
+            Input::Stop(payload) => {
+                let output = Output::Stop(StopPayload::new(payload.deck));
                 if let Err(error) = output.send(&mut sink).await {
                     error!("Failed to send output message: {}", error);
                     break;
