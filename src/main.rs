@@ -41,13 +41,28 @@ fn with_clients(clients: Clients) -> impl Filter<Extract = (Clients,), Error = I
     warp::any().map(move || clients.clone())
 }
 
-async fn register_client(id: Uuid, clients: Clients) {
-    clients.write().await.insert(id, Client { id });
-    info!("New client registered: {}", id.to_simple().to_string());
+async fn register_client(client_id: Uuid, clients: Clients) {
+    clients
+        .write()
+        .await
+        .insert(client_id, Client::new(client_id));
+    info!(
+        "New client registered: {}",
+        client_id.to_simple().to_string()
+    );
 }
 
 async fn websocket_handler(websocket: WebSocket, clients: Clients) {
     let (mut sink, mut stream) = websocket.split();
+    let (sender, mut receiver) = mpsc::unbounded_channel();
+
+    let manager = tokio::spawn(async move {
+        while let Some(message) = receiver.recv().await {
+            if let Err(error) = sink.send(message).await {
+                error!("Failed to forward message: {}", error);
+            };
+        }
+    });
 
     while let Some(input) = stream.next().await {
         let message = match input {
@@ -68,30 +83,74 @@ async fn websocket_handler(websocket: WebSocket, clients: Clients) {
 
         match input {
             Input::Register => {
-                let uuid = Uuid::new_v4();
-                register_client(uuid.clone(), clients.clone()).await;
-                let output = Output::Registered(RegisteredPayload::new(uuid));
-                if let Err(error) = output.send(&mut sink).await {
+                let client_id = Uuid::new_v4();
+                register_client(client_id.clone(), clients.clone()).await;
+
+                // TODO: Use match instead of unwrapping
+                let mut client = clients.read().await.get(&client_id).unwrap().clone();
+                // match client {
+                //     Some(client) => client,
+                //     None => {
+                //         error!("Failed to read client with ID {}", &client_id);
+                //         break;
+                //     }
+                // };
+
+                client.sender = Some(sender.clone());
+                clients
+                    .write()
+                    .await
+                    .insert(client.id.clone(), client.clone());
+
+                let output = Output::Registered(RegisteredPayload::new(client_id));
+                if let Err(error) = output.send(&sender).await {
                     error!("Failed to send output message: {}", error);
                     break;
                 }
             }
 
             Input::Play(payload) => {
-                let output = Output::Play(PlayPayload::new(payload.deck));
-                if let Err(error) = output.send(&mut sink).await {
+                let client_id = match payload.client_id {
+                    Some(client_id) => client_id,
+                    None => {
+                        error!("Failed to read client ID");
+                        break;
+                    }
+                };
+
+                // TODO: Use match instead of unwrapping
+                let client = clients.read().await.get(&client_id).unwrap().clone();
+
+                let output = Output::Play(PlayPayload::new(payload.deck, None));
+                // TODO: Use match instead of unwrapping
+                if let Err(error) = output.send(&client.sender.unwrap()).await {
                     error!("Failed to send output message: {}", error);
                     break;
                 }
             }
 
             Input::Stop(payload) => {
-                let output = Output::Stop(StopPayload::new(payload.deck));
-                if let Err(error) = output.send(&mut sink).await {
+                let client_id = match payload.client_id {
+                    Some(client_id) => client_id,
+                    None => {
+                        error!("Failed to read client ID");
+                        break;
+                    }
+                };
+
+                // TODO: Use match instead of unwrapping
+                let client = clients.read().await.get(&client_id).unwrap().clone();
+
+                let output = Output::Stop(StopPayload::new(payload.deck, None));
+                // TODO: Use match instead of unwrapping
+                if let Err(error) = output.send(&client.sender.unwrap()).await {
                     error!("Failed to send output message: {}", error);
                     break;
                 }
             }
         }
     }
+
+    // TODO: Use match instead of unwrapping
+    manager.await.unwrap();
 }

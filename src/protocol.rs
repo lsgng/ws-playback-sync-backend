@@ -1,15 +1,17 @@
-use futures::SinkExt;
+use futures::{future::OptionFuture, SinkExt};
 use futures_util::stream::SplitSink;
 use serde::{Deserialize, Serialize};
 use serde_json::error::Error as SerdeError;
 use std::error::Error;
+use tokio::sync::mpsc;
 use uuid::Uuid;
 use warp::ws::{Message, WebSocket};
+
+use crate::client;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload", rename_all = "camelCase")]
 pub enum Input {
-    #[serde(rename = "register")]
     Register,
     Play(PlayPayload),
     Stop(StopPayload),
@@ -43,12 +45,10 @@ impl Output {
         Ok(Message::text(serialized))
     }
 
-    pub async fn send(
-        self,
-        sink: &mut SplitSink<WebSocket, Message>,
-    ) -> Result<(), Box<dyn Error>> {
+    // TODO: Make send() a method of Client (or Clients/ClientHub) instead of Output
+    pub async fn send(self, sender: &mpsc::UnboundedSender<Message>) -> Result<(), Box<dyn Error>> {
         let output_message = self.to_message()?;
-        sink.send(output_message).await?;
+        sender.send(output_message)?;
         Ok(())
     }
 }
@@ -56,35 +56,37 @@ impl Output {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegisteredPayload {
-    user_id: Uuid,
+    client_id: Uuid,
 }
 
 impl RegisteredPayload {
-    pub fn new(user_id: Uuid) -> Self {
-        RegisteredPayload { user_id }
+    pub fn new(client_id: Uuid) -> Self {
+        RegisteredPayload { client_id }
     }
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayPayload {
+    pub client_id: Option<Uuid>,
     pub deck: u32,
 }
 
 impl PlayPayload {
-    pub fn new(deck: u32) -> Self {
-        PlayPayload { deck }
+    pub fn new(deck: u32, client_id: Option<Uuid>) -> Self {
+        PlayPayload { client_id, deck }
     }
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StopPayload {
+    pub client_id: Option<Uuid>,
     pub deck: u32,
 }
 
 impl StopPayload {
-    pub fn new(deck: u32) -> Self {
-        StopPayload { deck }
+    pub fn new(deck: u32, client_id: Option<Uuid>) -> Self {
+        StopPayload { client_id, deck }
     }
 }
