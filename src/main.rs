@@ -1,17 +1,14 @@
-use futures::{future, FutureExt, SinkExt, Stream, StreamExt, TryStream, TryStreamExt};
-use log::{error, info};
-use std::collections::HashMap;
-use std::convert::Infallible;
-use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use futures::{SinkExt, StreamExt};
+use log::error;
+use std::convert::{Infallible, TryFrom};
+use tokio::sync::mpsc;
 use uuid::Uuid;
-use warp::ws::{Message, WebSocket};
+use warp::ws::WebSocket;
 use warp::Filter;
 
 mod client;
 mod client_pool;
 mod protocol;
-use client::Client;
 use client_pool::ClientPool;
 use protocol::{Input, Output, PlayPayload, RegisteredPayload, StopPayload};
 
@@ -62,7 +59,7 @@ async fn websocket_handler(websocket: WebSocket, client_pool: ClientPool) {
             }
         };
 
-        let input = match Input::from_message(message) {
+        let input = match Input::try_from(message) {
             Ok(input) => input,
             Err(_) => {
                 error!("Failed to parse input message");

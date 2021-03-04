@@ -1,7 +1,7 @@
-use std::collections::HashMap;
 use std::error::Error;
 use std::io::{Error as IOError, ErrorKind};
 use std::sync::Arc;
+use std::{collections::HashMap, convert::TryFrom};
 use tokio::sync::{mpsc::UnboundedSender, RwLock};
 use uuid::Uuid;
 use warp::ws::Message;
@@ -32,7 +32,7 @@ impl ClientPool {
                 format!("Failed to read client with ID {}", &client_id),
             )
         })?;
-        let message = output.to_message()?;
+        let message = Message::try_from(output)?;
         client.clone().send(message)?;
         Ok(())
     }

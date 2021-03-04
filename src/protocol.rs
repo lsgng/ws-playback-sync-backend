@@ -1,11 +1,9 @@
-use futures::{future::OptionFuture, SinkExt};
-use futures_util::stream::SplitSink;
 use serde::{Deserialize, Serialize};
 use serde_json::error::Error as SerdeError;
+use std::convert::TryFrom;
 use std::error::Error;
-use tokio::sync::mpsc;
 use uuid::Uuid;
-use warp::ws::{Message, WebSocket};
+use warp::ws::Message;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload", rename_all = "camelCase")]
@@ -15,14 +13,18 @@ pub enum Input {
     Stop(StopPayload),
 }
 
-impl Input {
-    pub fn from_message(message: Message) -> Result<Self, ()> {
-        let message_string = message.to_str()?;
+impl TryFrom<Message> for Input {
+    type Error = Box<dyn Error>;
+
+    fn try_from(message: Message) -> Result<Self, <Self as TryFrom<Message>>::Error> {
+        let message_string = match message.to_str() {
+            Ok(message_string) => message_string,
+            Err(()) => return Err("Failed to parse message".into()),
+        };
         match serde_json::from_str::<Input>(&message_string) {
             Ok(input) => Ok(input),
-            Err(err) => {
-                eprintln!("{}", err);
-                return Err(());
+            Err(error) => {
+                return Err(error.into());
             }
         }
     }
@@ -37,10 +39,16 @@ pub enum Output {
     Stop(StopPayload),
 }
 
-impl Output {
-    pub fn to_message(self) -> Result<Message, SerdeError> {
-        let serialized = serde_json::to_string(&self)?;
-        Ok(Message::text(serialized))
+impl TryFrom<Output> for Message {
+    type Error = SerdeError;
+
+    fn try_from(output: Output) -> Result<Self, Self::Error> {
+        match serde_json::to_string(&output) {
+            Ok(output_string) => Ok(Message::text(output_string)),
+            Err(error) => {
+                return Err(error);
+            }
+        }
     }
 }
 
