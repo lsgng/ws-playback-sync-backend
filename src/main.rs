@@ -1,5 +1,3 @@
-use chrono::{DateTime, Utc};
-use futures::stream::SplitStream;
 use futures::{future, FutureExt, SinkExt, Stream, StreamExt, TryStream, TryStreamExt};
 use log::{error, info};
 use std::collections::HashMap;
@@ -11,24 +9,24 @@ use warp::ws::{Message, WebSocket};
 use warp::Filter;
 
 mod client;
-use client::Client;
+mod client_pool;
 mod protocol;
+use client::Client;
+use client_pool::ClientPool;
 use protocol::{Input, Output, PlayPayload, RegisteredPayload, StopPayload};
-
-type Clients = Arc<RwLock<HashMap<Uuid, Client>>>;
 
 #[tokio::main]
 async fn main() {
     env_logger::init();
 
-    let clients: Clients = Arc::new(RwLock::new(HashMap::new()));
+    let client_pool = ClientPool::new();
 
     let websocket_route = warp::path("websocket")
         .and(warp::ws())
-        .and(with_clients(clients.clone()))
-        .map(|ws: warp::ws::Ws, clients: Clients| {
+        .and(with_clients(client_pool.clone()))
+        .map(|ws: warp::ws::Ws, client_pool: ClientPool| {
             ws.on_upgrade(|websocket| async {
-                tokio::spawn(websocket_handler(websocket, clients));
+                tokio::spawn(websocket_handler(websocket, client_pool));
             })
         });
 
@@ -37,26 +35,17 @@ async fn main() {
     warp::serve(routes).run(([127, 0, 0, 1], 1234)).await;
 }
 
-fn with_clients(clients: Clients) -> impl Filter<Extract = (Clients,), Error = Infallible> + Clone {
-    warp::any().map(move || clients.clone())
+fn with_clients(
+    client_pool: ClientPool,
+) -> impl Filter<Extract = (ClientPool,), Error = Infallible> + Clone {
+    warp::any().map(move || client_pool.clone())
 }
 
-async fn register_client(client_id: Uuid, clients: Clients) {
-    clients
-        .write()
-        .await
-        .insert(client_id, Client::new(client_id));
-    info!(
-        "New client registered: {}",
-        client_id.to_simple().to_string()
-    );
-}
-
-async fn websocket_handler(websocket: WebSocket, clients: Clients) {
+async fn websocket_handler(websocket: WebSocket, client_pool: ClientPool) {
     let (mut sink, mut stream) = websocket.split();
     let (sender, mut receiver) = mpsc::unbounded_channel();
 
-    let manager = tokio::spawn(async move {
+    let forwarding = tokio::spawn(async move {
         while let Some(message) = receiver.recv().await {
             if let Err(error) = sink.send(message).await {
                 error!("Failed to forward message: {}", error);
@@ -84,26 +73,12 @@ async fn websocket_handler(websocket: WebSocket, clients: Clients) {
         match input {
             Input::Register => {
                 let client_id = Uuid::new_v4();
-                register_client(client_id.clone(), clients.clone()).await;
-
-                // TODO: Use match instead of unwrapping
-                let mut client = clients.read().await.get(&client_id).unwrap().clone();
-                // match client {
-                //     Some(client) => client,
-                //     None => {
-                //         error!("Failed to read client with ID {}", &client_id);
-                //         break;
-                //     }
-                // };
-
-                client.sender = Some(sender.clone());
-                clients
-                    .write()
-                    .await
-                    .insert(client.id.clone(), client.clone());
+                client_pool
+                    .register_client(client_id.clone(), sender.clone())
+                    .await;
 
                 let output = Output::Registered(RegisteredPayload::new(client_id));
-                if let Err(error) = output.send(&sender).await {
+                if let Err(error) = client_pool.clone().send(output, client_id).await {
                     error!("Failed to send output message: {}", error);
                     break;
                 }
@@ -117,13 +92,8 @@ async fn websocket_handler(websocket: WebSocket, clients: Clients) {
                         break;
                     }
                 };
-
-                // TODO: Use match instead of unwrapping
-                let client = clients.read().await.get(&client_id).unwrap().clone();
-
                 let output = Output::Play(PlayPayload::new(payload.deck, None));
-                // TODO: Use match instead of unwrapping
-                if let Err(error) = output.send(&client.sender.unwrap()).await {
+                if let Err(error) = client_pool.clone().send(output, client_id).await {
                     error!("Failed to send output message: {}", error);
                     break;
                 }
@@ -137,13 +107,8 @@ async fn websocket_handler(websocket: WebSocket, clients: Clients) {
                         break;
                     }
                 };
-
-                // TODO: Use match instead of unwrapping
-                let client = clients.read().await.get(&client_id).unwrap().clone();
-
                 let output = Output::Stop(StopPayload::new(payload.deck, None));
-                // TODO: Use match instead of unwrapping
-                if let Err(error) = output.send(&client.sender.unwrap()).await {
+                if let Err(error) = client_pool.clone().send(output, client_id).await {
                     error!("Failed to send output message: {}", error);
                     break;
                 }
@@ -152,5 +117,5 @@ async fn websocket_handler(websocket: WebSocket, clients: Clients) {
     }
 
     // TODO: Use match instead of unwrapping
-    manager.await.unwrap();
+    forwarding.await.unwrap();
 }

@@ -1,15 +1,20 @@
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{error::SendError, UnboundedSender};
 use uuid::Uuid;
 use warp::ws::Message;
 
 #[derive(Debug, Clone)]
 pub struct Client {
     pub id: Uuid,
-    pub sender: Option<mpsc::UnboundedSender<Message>>,
+    pub sender: UnboundedSender<Message>,
 }
 
 impl Client {
-    pub fn new(id: Uuid) -> Self {
-        Client { id, sender: None }
+    pub fn new(id: Uuid, sender: UnboundedSender<Message>) -> Self {
+        Client { id, sender }
+    }
+
+    pub fn send(self, message: Message) -> Result<(), SendError<Message>> {
+        self.sender.send(message)?;
+        Ok(())
     }
 }

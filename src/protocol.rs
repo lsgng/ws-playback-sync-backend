@@ -7,8 +7,6 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 use warp::ws::{Message, WebSocket};
 
-use crate::client;
-
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload", rename_all = "camelCase")]
 pub enum Input {
@@ -43,13 +41,6 @@ impl Output {
     pub fn to_message(self) -> Result<Message, SerdeError> {
         let serialized = serde_json::to_string(&self)?;
         Ok(Message::text(serialized))
-    }
-
-    // TODO: Make send() a method of Client (or Clients/ClientHub) instead of Output
-    pub async fn send(self, sender: &mpsc::UnboundedSender<Message>) -> Result<(), Box<dyn Error>> {
-        let output_message = self.to_message()?;
-        sender.send(output_message)?;
-        Ok(())
     }
 }
 
