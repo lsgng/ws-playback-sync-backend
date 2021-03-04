@@ -1,81 +1,143 @@
-use std::sync::Arc;
-use std::{error, result};
-
-use futures::{future, Stream, StreamExt, TryStream, TryStreamExt};
-
-use log::{error, info};
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::UnboundedSender;
-use tokio::time::Duration;
+use crate::client_pool::ClientPool;
+use crate::incoming_message::IncomingMessage;
+use crate::outgoing_message::OutgoingMessage;
+use crate::payload::{PlayPayload, RegistrationSuccessPayload, StopPayload};
+use futures::{SinkExt, StreamExt};
+use log::error;
+use std::convert::Infallible;
+use std::convert::TryFrom;
+use std::net::SocketAddr;
+use tokio::sync::{mpsc, mpsc::UnboundedSender};
+use uuid::Uuid;
 use warp::ws::{Message, WebSocket};
 use warp::Filter;
 
 pub struct Server {
-    port: u16,
+    address: SocketAddr,
 }
 
 impl Server {
-    pub fn new(port: u16) -> Self {
-        Server { port }
+    pub fn new(address: SocketAddr) -> Self {
+        Server { address }
     }
 
     pub async fn run(&self) {
-        info!("Starting server");
+        let client_pool = ClientPool::new();
 
-        let websocket_route =
-            warp::path("websocket")
-                .and(warp::ws())
-                .map(move |ws: warp::ws::Ws| {
-                    ws.on_upgrade(move |websocket| async move {
-                        tokio::spawn(Self::process_client(websocket));
-                    })
-                });
+        let websocket_route = warp::path("websocket")
+            .and(warp::ws())
+            .and(with_clients(client_pool.clone()))
+            .map(|ws: warp::ws::Ws, client_pool: ClientPool| {
+                ws.on_upgrade(|websocket| async {
+                    tokio::spawn(websocket_handler(websocket, client_pool));
+                })
+            });
 
-        let shutdown = async {
-            tokio::signal::ctrl_c()
-                .await
-                .expect("failed to install CTRL+C signal handler");
+        let routes = websocket_route.with(warp::cors().allow_any_origin());
+
+        warp::serve(routes).run(self.address).await;
+    }
+}
+
+fn with_clients(
+    client_pool: ClientPool,
+) -> impl Filter<Extract = (ClientPool,), Error = Infallible> + Clone {
+    warp::any().map(move || client_pool.clone())
+}
+
+async fn websocket_handler(websocket: WebSocket, client_pool: ClientPool) {
+    let (mut sink, mut stream) = websocket.split();
+    let (sender, mut receiver) = mpsc::unbounded_channel();
+
+    let forwarding = tokio::spawn(async move {
+        while let Some(message) = receiver.recv().await {
+            if let Err(error) = sink.send(message).await {
+                error!("Failed to forward message: {}", error);
+            };
+        }
+    });
+
+    while let Some(stream_item) = stream.next().await {
+        let message = match stream_item {
+            Ok(message) => message,
+            Err(error) => {
+                error!("Failed to read input message: {}", error);
+                break;
+            }
         };
 
-        let (_, serving) = warp::serve(websocket_route)
-            .bind_with_graceful_shutdown(([127, 0, 0, 1], self.port), shutdown);
+        if !message.is_text() {
+            break;
+        }
 
-        serving.await;
+        let incoming_message = match IncomingMessage::try_from(message) {
+            Ok(incoming_message) => incoming_message,
+            Err(_) => {
+                error!("Failed to parse input message");
+                break;
+            }
+        };
+        handle_incoming_message(incoming_message, &client_pool, &sender).await;
     }
 
-    pub async fn process_client(ws: WebSocket) {
-        let (client_ws_sender, mut client_ws_rcv) = ws.split();
-        info!("processing clinet");
-        while let Some(result) = client_ws_rcv.next().await {
-            info!("WHILE");
-            let msg = match result {
-                Ok(msg) => print!("received"),
-                Err(e) => {
-                    eprintln!("error receiving ws message for id");
-                    break;
+    if let Err(error) = forwarding.await {
+        error!("Failed to forward messages: {}", error);
+    };
+}
+
+pub async fn handle_incoming_message(
+    incoming_message: IncomingMessage,
+    client_pool: &ClientPool,
+    sender: &UnboundedSender<Message>,
+) {
+    match incoming_message {
+        IncomingMessage::Registration => {
+            let client_id = Uuid::new_v4();
+            client_pool
+                .register_client(client_id.clone(), sender.clone())
+                .await;
+
+            let output =
+                OutgoingMessage::RegistrationSuccess(RegistrationSuccessPayload::new(client_id));
+            if let Err(error) = client_pool.clone().send_to(output, &client_id).await {
+                error!("Failed to send output message: {}", error);
+            }
+        }
+
+        IncomingMessage::Play(payload) => {
+            let client_id = match payload.client_id {
+                Some(client_id) => client_id,
+                None => {
+                    error!("Failed to read client ID");
+                    return;
                 }
             };
-            info!("DONE")
+            let outgoing_message = OutgoingMessage::Play(PlayPayload::new(payload.player, None));
+            if let Err(error) = client_pool
+                .clone()
+                .broadcast_ignore(outgoing_message, &client_id)
+                .await
+            {
+                error!("Failed to send output message: {}", error);
+            }
+        }
+
+        IncomingMessage::Stop(payload) => {
+            let client_id = match payload.client_id {
+                Some(client_id) => client_id,
+                None => {
+                    error!("Failed to read client ID");
+                    return;
+                }
+            };
+            let output = OutgoingMessage::Stop(StopPayload::new(payload.player, None));
+            if let Err(error) = client_pool
+                .clone()
+                .broadcast_ignore(output, &client_id)
+                .await
+            {
+                error!("Failed to send output message: {}", error);
+            }
         }
     }
-
-    // async fn process_client(
-    //     websocket: WebSocket,
-    // ) -> impl Stream<Item = Result<Message, warp::Error>> {
-    //     info!("Processing client");
-    //     let (_, stream) = websocket.split();
-    //     stream
-    //         .take_while(|message| {
-    //             info!("Taking while...");
-    //             future::ready(if let Ok(message) = message {
-    //                 message.is_text()
-    //             } else {
-    //                 false
-    //             })
-    //         })
-    //         .map(move |message| match message {
-    //             Err(err) => Err(err),
-    //             Ok(message) => Ok(message),
-    //         })
-    // }
 }

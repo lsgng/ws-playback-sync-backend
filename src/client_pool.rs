@@ -7,7 +7,7 @@ use uuid::Uuid;
 use warp::ws::Message;
 
 use crate::client::Client;
-use crate::protocol::Output;
+use crate::outgoing_message::OutgoingMessage;
 
 #[derive(Debug, Clone)]
 pub struct ClientPool(Arc<RwLock<HashMap<Uuid, Client>>>);
@@ -24,7 +24,11 @@ impl ClientPool {
             .insert(client_id, Client::new(client_id, sender));
     }
 
-    pub async fn send_to(self, output: Output, client_id: &Uuid) -> Result<(), Box<dyn Error>> {
+    pub async fn send_to(
+        self,
+        output: OutgoingMessage,
+        client_id: &Uuid,
+    ) -> Result<(), Box<dyn Error>> {
         let client_pool = self.0.read().await;
         let client = client_pool.get(&client_id).ok_or_else(|| {
             IOError::new(
@@ -39,7 +43,7 @@ impl ClientPool {
 
     pub async fn broadcast_ignore(
         self,
-        output: Output,
+        output: OutgoingMessage,
         ignored_client_id: &Uuid,
     ) -> Result<(), Box<dyn Error>> {
         let client_pool = self.0.read().await;
