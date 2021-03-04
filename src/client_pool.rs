@@ -24,7 +24,7 @@ impl ClientPool {
             .insert(client_id, Client::new(client_id, sender));
     }
 
-    pub async fn send(self, output: Output, client_id: Uuid) -> Result<(), Box<dyn Error>> {
+    pub async fn send_to(self, output: Output, client_id: &Uuid) -> Result<(), Box<dyn Error>> {
         let client_pool = self.0.read().await;
         let client = client_pool.get(&client_id).ok_or_else(|| {
             IOError::new(
@@ -34,6 +34,22 @@ impl ClientPool {
         })?;
         let message = Message::try_from(output)?;
         client.clone().send(message)?;
+        Ok(())
+    }
+
+    pub async fn broadcast_ignore(
+        self,
+        output: Output,
+        ignored_client_id: &Uuid,
+    ) -> Result<(), Box<dyn Error>> {
+        let client_pool = self.0.read().await;
+        for (client_id, client) in client_pool.iter() {
+            if client_id == ignored_client_id {
+                continue;
+            }
+            let message = Message::try_from(output.clone())?;
+            client.clone().send(message)?;
+        }
         Ok(())
     }
 }

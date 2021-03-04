@@ -30,7 +30,7 @@ impl TryFrom<Message> for Input {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload", rename_all = "camelCase")]
 pub enum Output {
     #[serde(rename = "registered")]
@@ -52,7 +52,7 @@ impl TryFrom<Output> for Message {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegisteredPayload {
     client_id: Uuid,
@@ -64,7 +64,7 @@ impl RegisteredPayload {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayPayload {
     pub client_id: Option<Uuid>,
@@ -77,7 +77,7 @@ impl PlayPayload {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StopPayload {
     pub client_id: Option<Uuid>,

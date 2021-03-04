@@ -59,6 +59,10 @@ async fn websocket_handler(websocket: WebSocket, client_pool: ClientPool) {
             }
         };
 
+        if !message.is_text() {
+            break;
+        }
+
         let input = match Input::try_from(message) {
             Ok(input) => input,
             Err(_) => {
@@ -75,7 +79,7 @@ async fn websocket_handler(websocket: WebSocket, client_pool: ClientPool) {
                     .await;
 
                 let output = Output::Registered(RegisteredPayload::new(client_id));
-                if let Err(error) = client_pool.clone().send(output, client_id).await {
+                if let Err(error) = client_pool.clone().send_to(output, &client_id).await {
                     error!("Failed to send output message: {}", error);
                     break;
                 }
@@ -90,7 +94,11 @@ async fn websocket_handler(websocket: WebSocket, client_pool: ClientPool) {
                     }
                 };
                 let output = Output::Play(PlayPayload::new(payload.deck, None));
-                if let Err(error) = client_pool.clone().send(output, client_id).await {
+                if let Err(error) = client_pool
+                    .clone()
+                    .broadcast_ignore(output, &client_id)
+                    .await
+                {
                     error!("Failed to send output message: {}", error);
                     break;
                 }
@@ -105,7 +113,11 @@ async fn websocket_handler(websocket: WebSocket, client_pool: ClientPool) {
                     }
                 };
                 let output = Output::Stop(StopPayload::new(payload.deck, None));
-                if let Err(error) = client_pool.clone().send(output, client_id).await {
+                if let Err(error) = client_pool
+                    .clone()
+                    .broadcast_ignore(output, &client_id)
+                    .await
+                {
                     error!("Failed to send output message: {}", error);
                     break;
                 }
@@ -113,6 +125,7 @@ async fn websocket_handler(websocket: WebSocket, client_pool: ClientPool) {
         }
     }
 
-    // TODO: Use match instead of unwrapping
-    forwarding.await.unwrap();
+    if let Err(error) = forwarding.await {
+        error!("Failed to forward messages: {}", error);
+    };
 }
