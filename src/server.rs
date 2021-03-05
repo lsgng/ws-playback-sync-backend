@@ -1,7 +1,7 @@
-use crate::incoming_message::IncomingMessage;
+use crate::client_pool::ClientPool;
 use crate::outgoing_message::OutgoingMessage;
 use crate::payload::{PlayPayload, RegistrationSuccessPayload, StopPayload};
-use crate::{client_pool::ClientPool, payload};
+use crate::{incoming_message::IncomingMessage, payload::FastForwardPayload};
 use futures::{SinkExt, StreamExt};
 use log::error;
 use std::convert::Infallible;
@@ -113,7 +113,7 @@ pub async fn handle_incoming_message(
                 }
             };
             let outgoing_message =
-                OutgoingMessage::Play(PlayPayload::new(payload.player, None, payload.timestamp));
+                OutgoingMessage::Play(PlayPayload::new(payload.player, payload.timestamp, None));
             if let Err(error) = client_pool
                 .clone()
                 .broadcast_ignore(outgoing_message, &client_id)
@@ -132,6 +132,29 @@ pub async fn handle_incoming_message(
                 }
             };
             let output = OutgoingMessage::Stop(StopPayload::new(payload.player, None));
+            if let Err(error) = client_pool
+                .clone()
+                .broadcast_ignore(output, &client_id)
+                .await
+            {
+                error!("Failed to send output message: {}", error);
+            }
+        }
+
+        IncomingMessage::FastForward(payload) => {
+            let client_id = match payload.client_id {
+                Some(client_id) => client_id,
+                None => {
+                    error!("Failed to read client ID");
+                    return;
+                }
+            };
+            let output = OutgoingMessage::FastForward(FastForwardPayload::new(
+                payload.player,
+                payload.target_position,
+                payload.timestamp,
+                None,
+            ));
             if let Err(error) = client_pool
                 .clone()
                 .broadcast_ignore(output, &client_id)

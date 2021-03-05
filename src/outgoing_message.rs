@@ -1,4 +1,4 @@
-use crate::payload::{PlayPayload, RegistrationSuccessPayload, StopPayload};
+use crate::payload::{FastForwardPayload, PlayPayload, RegistrationSuccessPayload, StopPayload};
 use serde::{Deserialize, Serialize};
 use serde_json::error::Error as SerdeError;
 use std::convert::TryFrom;
@@ -10,6 +10,7 @@ pub enum OutgoingMessage {
     RegistrationSuccess(RegistrationSuccessPayload),
     Play(PlayPayload),
     Stop(StopPayload),
+    FastForward(FastForwardPayload),
 }
 
 impl TryFrom<OutgoingMessage> for Message {

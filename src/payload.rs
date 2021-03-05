@@ -6,6 +6,9 @@ use uuid::Uuid;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PlayerID(u32);
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Milliseconds(u32);
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegistrationSuccessPayload {
@@ -21,18 +24,18 @@ impl RegistrationSuccessPayload {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayPayload {
-    pub client_id: Option<Uuid>,
     pub player: PlayerID,
     #[serde(with = "ts_milliseconds")]
     pub timestamp: DateTime<Utc>,
+    pub client_id: Option<Uuid>,
 }
 
 impl PlayPayload {
-    pub fn new(player: PlayerID, client_id: Option<Uuid>, timestamp: DateTime<Utc>) -> Self {
+    pub fn new(player: PlayerID, timestamp: DateTime<Utc>, client_id: Option<Uuid>) -> Self {
         PlayPayload {
-            client_id,
             player,
             timestamp,
+            client_id,
         }
     }
 }
@@ -40,12 +43,38 @@ impl PlayPayload {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StopPayload {
-    pub client_id: Option<Uuid>,
     pub player: PlayerID,
+    pub client_id: Option<Uuid>,
 }
 
 impl StopPayload {
     pub fn new(player: PlayerID, client_id: Option<Uuid>) -> Self {
         StopPayload { client_id, player }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FastForwardPayload {
+    pub player: PlayerID,
+    pub target_position: Milliseconds,
+    #[serde(with = "ts_milliseconds")]
+    pub timestamp: DateTime<Utc>,
+    pub client_id: Option<Uuid>,
+}
+
+impl FastForwardPayload {
+    pub fn new(
+        player: PlayerID,
+        target_position: Milliseconds,
+        timestamp: DateTime<Utc>,
+        client_id: Option<Uuid>,
+    ) -> Self {
+        FastForwardPayload {
+            player,
+            target_position,
+            timestamp,
+            client_id,
+        }
     }
 }

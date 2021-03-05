@@ -1,4 +1,4 @@
-use crate::payload::{PlayPayload, StopPayload};
+use crate::payload::{FastForwardPayload, PlayPayload, StopPayload};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::error::Error;
@@ -10,6 +10,7 @@ pub enum IncomingMessage {
     Registration,
     Play(PlayPayload),
     Stop(StopPayload),
+    FastForward(FastForwardPayload),
 }
 
 impl TryFrom<Message> for IncomingMessage {
