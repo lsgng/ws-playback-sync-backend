@@ -1,7 +1,7 @@
-use crate::client_pool::ClientPool;
 use crate::incoming_message::IncomingMessage;
 use crate::outgoing_message::OutgoingMessage;
 use crate::payload::{PlayPayload, RegistrationSuccessPayload, StopPayload};
+use crate::{client_pool::ClientPool, payload};
 use futures::{SinkExt, StreamExt};
 use log::error;
 use std::convert::Infallible;
@@ -112,7 +112,8 @@ pub async fn handle_incoming_message(
                     return;
                 }
             };
-            let outgoing_message = OutgoingMessage::Play(PlayPayload::new(payload.player, None));
+            let outgoing_message =
+                OutgoingMessage::Play(PlayPayload::new(payload.player, None, payload.timestamp));
             if let Err(error) = client_pool
                 .clone()
                 .broadcast_ignore(outgoing_message, &client_id)

@@ -1,4 +1,6 @@
+use chrono::{serde::ts_milliseconds, DateTime, Utc};
 use serde::{Deserialize, Serialize};
+
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -21,11 +23,17 @@ impl RegistrationSuccessPayload {
 pub struct PlayPayload {
     pub client_id: Option<Uuid>,
     pub player: PlayerID,
+    #[serde(with = "ts_milliseconds")]
+    pub timestamp: DateTime<Utc>,
 }
 
 impl PlayPayload {
-    pub fn new(player: PlayerID, client_id: Option<Uuid>) -> Self {
-        PlayPayload { client_id, player }
+    pub fn new(player: PlayerID, client_id: Option<Uuid>, timestamp: DateTime<Utc>) -> Self {
+        PlayPayload {
+            client_id,
+            player,
+            timestamp,
+        }
     }
 }
 
