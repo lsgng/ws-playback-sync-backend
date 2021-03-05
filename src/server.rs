@@ -1,6 +1,6 @@
-use crate::client_pool::ClientPool;
 use crate::outgoing_message::OutgoingMessage;
 use crate::payload::{PlayPayload, RegistrationSuccessPayload, StopPayload};
+use crate::{client_pool::ClientPool, payload::CrossFadePayload};
 use crate::{incoming_message::IncomingMessage, payload::FastForwardPayload};
 use futures::{SinkExt, StreamExt};
 use log::error;
@@ -72,8 +72,8 @@ async fn websocket_handler(websocket: WebSocket, client_pool: ClientPool) {
 
         let incoming_message = match IncomingMessage::try_from(message) {
             Ok(incoming_message) => incoming_message,
-            Err(_) => {
-                error!("Failed to parse input message");
+            Err(error) => {
+                error!("Failed to parse input message: {}", error);
                 break;
             }
         };
@@ -155,6 +155,24 @@ pub async fn handle_incoming_message(
                 payload.timestamp,
                 None,
             ));
+            if let Err(error) = client_pool
+                .clone()
+                .broadcast_ignore(output, &client_id)
+                .await
+            {
+                error!("Failed to send output message: {}", error);
+            }
+        }
+
+        IncomingMessage::CrossFade(payload) => {
+            let client_id = match payload.client_id {
+                Some(client_id) => client_id,
+                None => {
+                    error!("Failed to read client ID");
+                    return;
+                }
+            };
+            let output = OutgoingMessage::CrossFade(CrossFadePayload::new(payload.position, None));
             if let Err(error) = client_pool
                 .clone()
                 .broadcast_ignore(output, &client_id)

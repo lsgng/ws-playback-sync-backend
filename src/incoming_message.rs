@@ -1,4 +1,4 @@
-use crate::payload::{FastForwardPayload, PlayPayload, StopPayload};
+use crate::payload::{CrossFadePayload, FastForwardPayload, PlayPayload, StopPayload};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::error::Error;
@@ -11,6 +11,7 @@ pub enum IncomingMessage {
     Play(PlayPayload),
     Stop(StopPayload),
     FastForward(FastForwardPayload),
+    CrossFade(CrossFadePayload),
 }
 
 impl TryFrom<Message> for IncomingMessage {
@@ -21,6 +22,7 @@ impl TryFrom<Message> for IncomingMessage {
             Ok(message_string) => message_string,
             Err(()) => return Err("Failed to parse message".into()),
         };
+        println!("{}", &message_string);
         match serde_json::from_str::<IncomingMessage>(&message_string) {
             Ok(input) => Ok(input),
             Err(error) => {

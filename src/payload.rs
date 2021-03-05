@@ -78,3 +78,19 @@ impl FastForwardPayload {
         }
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CrossFadePayload {
+    pub position: u32,
+    pub client_id: Option<Uuid>,
+}
+
+impl CrossFadePayload {
+    pub fn new(position: u32, client_id: Option<Uuid>) -> Self {
+        CrossFadePayload {
+            position,
+            client_id,
+        }
+    }
+}
