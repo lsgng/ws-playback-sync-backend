@@ -1,5 +1,5 @@
 [package]
-name = "beatsync-proto-backend"
+name = "ws-sync-backend"
 version = "0.1.0"
 authors = ["Florian Liesegang <lysigk@gmail.com>"]
 edition = "2018"
