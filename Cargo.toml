@@ -1,5 +1,5 @@
 [package]
-name = "b2b-prototype-backend"
+name = "beatsync-proto-backend"
 version = "0.1.0"
 authors = ["Florian Liesegang <lysigk@gmail.com>"]
 edition = "2018"
