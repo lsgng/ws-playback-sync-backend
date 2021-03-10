@@ -1,7 +1,7 @@
 FROM ekidd/rust-musl-builder:stable as builder
 
-RUN cargo new --bin ws-sync-backend
-WORKDIR ./ws-sync-backend
+RUN cargo new --bin ws-playback-sync-backend
+WORKDIR ./ws-playback-sync-backend
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
 RUN cargo build --release
@@ -27,11 +27,11 @@ RUN apk update \
     && apk add --no-cache ca-certificates tzdata \
     && rm -rf /var/cache/apk/*
 
-COPY --from=builder /home/rust/src/ws-sync-backend/target/x86_64-unknown-linux-musl/release/ws-sync-backend ${APP}/ws-sync-backend
+COPY --from=builder /home/rust/src/ws-playback-sync-backend/target/x86_64-unknown-linux-musl/release/ws-playback-sync-backend ${APP}/ws-playback-sync-backend
 
 RUN chown -R $APP_USER:$APP_USER ${APP}
 
 USER $APP_USER
 WORKDIR ${APP}
 
-CMD ["./ws-sync-backend ${PORT}"]
+CMD ./ws-playback-sync-backend ${PORT}

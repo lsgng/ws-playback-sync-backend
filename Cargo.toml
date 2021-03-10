@@ -1,5 +1,5 @@
 [package]
-name = "ws-sync-backend"
+name = "ws-playback-sync-backend"
 version = "0.1.0"
 authors = ["Florian Liesegang <lysigk@gmail.com>"]
 edition = "2018"
