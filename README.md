@@ -1,6 +1,8 @@
-# WebSocket audio playback synchronization - Backend
+# WebSocket audio playback synchronization - Server
 
-This repository contains the backend code for the [WebSocket audio playback snychronization prototype](https://github.com/lsgng/ws-playback-sync-frontend).
+This repository contains the back-end code for a very basic WebSocket based audio playback snychronization prototype. See the [front-end repository](https://github.com/lsgng/ws-playback-sync-frontend) for further information.
+
+A simple WebSocket server built with [Warp](https://github.com/seanmonstar/warp) and [Tokio](https://github.com/tokio-rs/tokio). Broadcasts incoming messages to all connected clients.
 
 ## Usage
 
